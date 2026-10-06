@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Harting PatchCore V1</title>
+  <style>
+    :root { font-family: Inter, Arial, sans-serif; color: #e7eaf0; background: #111318; }
+    body { margin: 0; }
+    header { padding: 16px 22px; border-bottom: 1px solid #2a2e37; display:flex; justify-content:space-between; }
+    .layout { display:grid; grid-template-columns: 2fr 1fr; gap: 14px; padding: 14px; }
+    .panel { background:#191c22; border:1px solid #2a2e37; border-radius:10px; overflow:hidden; }
+    .panel h3 { margin:0; padding:12px 14px; font-size:14px; border-bottom:1px solid #2a2e37; }
+    img { width:100%; display:block; background:#090a0d; }
+    .metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; }
+    .metric { background:#111318; border:1px solid #2a2e37; border-radius:8px; padding:10px; }
+    .label { color:#8f98a8; font-size:12px; }
+    .value { font-size:18px; margin-top:4px; }
+    .status { font-size:24px; font-weight:700; }
+    .normal { color:#61d095; }
+    .anomaly { color:#ff6b6b; }
+    .small { color:#8f98a8; font-size:12px; padding:0 14px 14px; }
+    @media (max-width: 1000px) { .layout { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div><strong>HARTING PATCHCORE V1</strong><div id="selection">Connecting…</div></div>
+  <div id="connection">● CONNECTING</div>
+</header>
+
+<div class="layout">
+  <div>
+    <section class="panel">
+      <h3>LIVE CAMERA</h3>
+      <img src="/stream/raw.mjpg" alt="live camera" />
+    </section>
+    <section class="panel" style="margin-top:14px">
+      <h3>ORIGINAL / HEATMAP / OVERLAY</h3>
+      <img src="/stream/composite.mjpg" alt="PatchCore analysis" />
+    </section>
+  </div>
+
+  <div>
+    <section class="panel">
+      <h3>INFERENCE</h3>
+      <div class="metrics">
+        <div class="metric"><div class="label">STATUS</div><div id="status" class="status">—</div></div>
+        <div class="metric"><div class="label">FRAME</div><div id="frame" class="value">—</div></div>
+        <div class="metric"><div class="label">ANOMALY SCORE</div><div id="score" class="value">—</div></div>
+        <div class="metric"><div class="label">THRESHOLD</div><div id="threshold" class="value">—</div></div>
+        <div class="metric"><div class="label">PATCHCORE INFERENCE</div><div id="inference" class="value">—</div></div>
+        <div class="metric"><div class="label">PIPELINE</div><div id="pipeline" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:14px">
+      <h3>SYSTEM</h3>
+      <div class="metrics">
+        <div class="metric"><div class="label">GPU</div><div id="gpu" class="value">—</div></div>
+        <div class="metric"><div class="label">GPU UTIL</div><div id="gpu_util" class="value">—</div></div>
+        <div class="metric"><div class="label">GPU MEMORY</div><div id="gpu_mem" class="value">—</div></div>
+        <div class="metric"><div class="label">GPU TEMP</div><div id="gpu_temp" class="value">—</div></div>
+        <div class="metric"><div class="label">CPU</div><div id="cpu" class="value">—</div></div>
+        <div class="metric"><div class="label">RAM</div><div id="ram" class="value">—</div></div>
+      </div>
+      <div class="small" id="cpu_name"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+function setText(id, value) { document.getElementById(id).textContent = value; }
+
+const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${wsProtocol}://${location.host}/ws/metrics`);
+
+ws.onopen = () => setText("connection", "● CONNECTED");
+ws.onclose = () => setText("connection", "● DISCONNECTED");
+ws.onerror = () => setText("connection", "● ERROR");
+
+ws.onmessage = (event) => {
+  const d = JSON.parse(event.data);
+  setText("selection", `${d.product}  |  ${d.view}`);
+  setText("frame", d.frame_id);
+  setText("score", Number(d.score).toFixed(5));
+  setText("threshold", Number(d.threshold).toFixed(5));
+  setText("inference", `${Number(d.inference_ms).toFixed(1)} ms`);
+  setText("pipeline", `${Number(d.system.pipeline_ms).toFixed(1)} ms`);
+
+  const status = document.getElementById("status");
+  status.textContent = d.status;
+  status.className = "status " + (d.status === "ANOMALY" ? "anomaly" : "normal");
+
+  setText("gpu", d.system.gpu_name || "N/A");
+  setText("gpu_util", d.system.gpu_percent == null ? "N/A" : `${Number(d.system.gpu_percent).toFixed(0)} %`);
+  setText("gpu_mem", d.system.gpu_memory_used_mb == null ? "N/A" : `${Number(d.system.gpu_memory_used_mb).toFixed(0)} MB / ${Number(d.system.gpu_memory_total_mb).toFixed(0)} MB`);
+  setText("gpu_temp", d.system.gpu_temperature_c == null ? "N/A" : `${Number(d.system.gpu_temperature_c).toFixed(0)} °C`);
+  setText("cpu", `${Number(d.system.cpu_percent).toFixed(0)} %`);
+  setText("ram", `${Number(d.system.ram_percent).toFixed(0)} %  (${Number(d.system.ram_used_mb).toFixed(0)} MB)`);
+  setText("cpu_name", d.system.cpu_name || "");
+};
+</script>
+</body>
+</html>

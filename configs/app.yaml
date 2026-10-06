@@ -1,0 +1,34 @@
+project:
+  name: harting-anomaly-v1
+
+selection:
+  product: harting_baseline_10e_m_s
+  view: top
+
+camera:
+  # 0 = first local camera. A string can be used for RTSP/video paths.
+  source: 0
+  width: 1280
+  height: 720
+  fps: 30
+  jpeg_quality: 80
+
+inference:
+  image_size: [256, 256]
+  device: auto
+  display_heatmap_alpha: 0.45
+
+model:
+  backbone: wide_resnet50_2
+  layers: [layer2, layer3]
+  pre_trained: true
+  coreset_sampling_ratio: 0.10
+  num_neighbors: 9
+
+threshold:
+  validation_quantile: 0.995
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  telemetry_interval_seconds: 0.5
