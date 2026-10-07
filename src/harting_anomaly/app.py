@@ -16,7 +16,8 @@ runtime = InferenceRuntime()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     import yaml
-    config_path = CONFIG.configs_root / "app.yaml"
+    config_path = CONFIG.paths.configs_root / "app.yaml"
+    # config_path = CONFIG.configs_root / "app.yaml"
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
     selection = config.get("selection", {})
     product = selection.get("product")

@@ -52,33 +52,110 @@ class InferenceRuntime:
         self._latest: RuntimeSnapshot | None = None
         self._frame_id = 0
         self._last_frame_time = time.perf_counter()
+        self._using_video = True
+
+    # def start(self, product: str, view: str) -> None:
+    #     self.product = product
+    #     self.view = view
+    #     model_dir = CONFIG.paths.patchcore_models_root / product / view
+    #     if not (model_dir / "model.ckpt").exists():
+    #         raise FileNotFoundError(f"PatchCore checkpoint missing: {model_dir / 'model.ckpt'}")
+
+    #     self._engine = PatchCoreEngine.load(model_dir)
+
+    #     # source = self._camera_source()
+    #     # self._capture = cv2.VideoCapture(source)
+    #     # if not self._capture.isOpened():
+    #     #     raise RuntimeError(f"Could not open camera source: {source}")
+    #     source = self._camera_source()
+
+    #     self._capture = cv2.VideoCapture(source)
+
+    #     # Camera unavailable -> fall back to local video.
+    #     if not self._capture.isOpened():
+    #         print(f"Could not open camera source: {source}")
+    #         print("Falling back to local video source.mp4")
+
+    #         video_path = CONFIG.paths.data_root / "source.avi"
+
+    #         if not video_path.exists():
+    #             raise FileNotFoundError(
+    #                 f"Camera unavailable and fallback video not found: {video_path}"
+    #             )
+
+    #         self._capture.release()
+    #         self._capture = cv2.VideoCapture(str(video_path))
+
+    #         if not self._capture.isOpened():
+    #             raise RuntimeError(
+    #                 f"Could not open fallback video source: {video_path}"
+    #             )
+
+    #     self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    #     self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    #     self._capture.set(cv2.CAP_PROP_FPS, 30)
+
+    #     self._stop.clear()
+    #     self._thread = threading.Thread(target=self._loop, name="patchcore-inference", daemon=True)
+    #     self._thread.start()
 
     def start(self, product: str, view: str) -> None:
         self.product = product
         self.view = view
+
         model_dir = CONFIG.paths.patchcore_models_root / product / view
         if not (model_dir / "model.ckpt").exists():
-            raise FileNotFoundError(f"PatchCore checkpoint missing: {model_dir / 'model.ckpt'}")
+            raise FileNotFoundError(
+                f"PatchCore checkpoint missing: {model_dir / 'model.ckpt'}"
+            )
 
         self._engine = PatchCoreEngine.load(model_dir)
 
         source = self._camera_source()
         self._capture = cv2.VideoCapture(source)
-        if not self._capture.isOpened():
-            raise RuntimeError(f"Could not open camera source: {source}")
 
-        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        self._capture.set(cv2.CAP_PROP_FPS, 30)
+        using_video = False
+
+        # Camera unavailable -> fall back to local video.
+        if not self._capture.isOpened():
+            print(f"Could not open camera source: {source}")
+            print("Falling back to local video source.avi")
+
+            video_path = CONFIG.paths.data_root / "source.avi"
+
+            if not video_path.exists():
+                raise FileNotFoundError(
+                    f"Camera unavailable and fallback video not found: {video_path}"
+                )
+
+            self._capture.release()
+            self._capture = cv2.VideoCapture(str(video_path))
+            using_video = True
+
+            if not self._capture.isOpened():
+                raise RuntimeError(
+                    f"Could not open fallback video source: {video_path}"
+                )
+
+        if not using_video:
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            self._capture.set(cv2.CAP_PROP_FPS, 30)
 
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="patchcore-inference", daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop,
+            name="patchcore-inference",
+            daemon=True,
+        )
         self._thread.start()
+
+
 
     def _camera_source(self):
         # Keep config handling simple for V1; manual editing is intentional.
         source = 0
-        config_path = CONFIG.configs_root / "app.yaml"
+        config_path = CONFIG.paths.configs_root / "app.yaml"
         if config_path.exists():
             try:
                 import yaml
@@ -89,6 +166,43 @@ class InferenceRuntime:
         if isinstance(source, str) and source.isdigit():
             return int(source)
         return source
+
+
+    # def _camera_source(self):
+    #     # Keep config handling simple for V1; manual editing is intentional.
+    #     source = 0
+    #     config_path = CONFIG.paths.configs_root / "app.yaml"
+
+    #     if config_path.exists():
+    #         try:
+    #             import yaml
+
+    #             config = yaml.safe_load(
+    #                 config_path.read_text(encoding="utf-8")
+    #             ) or {}
+
+    #             camera_config = config.get("camera", {})
+    #             source = camera_config.get("source", 0)
+
+    #         except Exception:
+    #             pass
+
+    #     # If source is explicitly configured, use it.
+    #     if source is not None:
+    #         if isinstance(source, str) and source.isdigit():
+    #             return int(source)
+    #         return source
+
+    #     # No camera source configured -> use local video.
+    #     video_path = CONFIG.paths.data_root / "source.mp4"
+
+    #     if not video_path.exists():
+    #         raise FileNotFoundError(
+    #             f"No camera source configured and fallback video not found: {video_path}"
+    #         )
+
+    #     return str(video_path)
+
 
     def stop(self) -> None:
         self._stop.set()
@@ -104,6 +218,8 @@ class InferenceRuntime:
         while not self._stop.is_set():
             ok, frame = self._capture.read()
             if not ok or frame is None:
+                if self._using_video:
+                    self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 time.sleep(0.1)
                 continue
 

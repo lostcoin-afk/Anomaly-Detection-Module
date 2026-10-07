@@ -1,3 +1,9 @@
 /data
 /harting_env
-*/__pycache__/*
+# */__pycache__/*
+*.egg-info/
+__pycache__/
+*.pyc
+/logs
+*.vscode
+/models
